@@ -525,6 +525,50 @@ static void test_code_action()
     free(resp);
 }
 
+static void on_unanswered_request(int signal_number)
+{
+    (void)signal_number;
+    const char message[] = "TEST FAIL: no answer to an unknown request\n";
+    write(STDERR_FILENO, message, sizeof(message) - 1);
+    _exit(1);
+}
+
+static void test_unknown_method(void)
+{
+    printf("Running test_unknown_method...\n");
+    // An unknown notification gets no answer; the unknown request after it gets an error
+    // instead of leaving the client waiting (the alarm turns a hang into a failure).
+    signal(SIGALRM, on_unanswered_request);
+    alarm(5);
+    send_request("{\"jsonrpc\": \"2.0\", \"method\": \"$/unknownNotification\", \"params\": {}}");
+    send_request("{\"jsonrpc\": \"2.0\", \"id\": 900, \"method\": \"textDocument/unknownRequest\", "
+                 "\"params\": {}}");
+    char *response = wait_for_response(900);
+    alarm(0);
+    if (!response || !strstr(response, "-32601"))
+    {
+        fail("An unknown request must get a MethodNotFound error");
+    }
+    free(response);
+    printf("PASS: test_unknown_method\n");
+}
+
+static void test_declaration(void)
+{
+    printf("Running test_declaration...\n");
+    // test_definition opened /tmp/test_def.zc, where `target()` on line 2 is defined on line 0.
+    send_request("{\"jsonrpc\": \"2.0\", \"id\": 61, \"method\": \"textDocument/declaration\", "
+                 "\"params\": {\"textDocument\": {\"uri\": \"file:///tmp/test_def.zc\"}, "
+                 "\"position\": {\"line\": 2, \"character\": 6}}}");
+    char *resp = wait_for_response(61);
+    if (!resp || !strstr(resp, "\"line\":0"))
+    {
+        fail("Go to declaration must find target() on line 0");
+    }
+    free(resp);
+    printf("PASS: test_declaration\n");
+}
+
 // The symbols named like `query` must include `expected` with that kind (and container).
 static void expect_workspace_symbol(int id, const char *query, const char *expected, int kind,
                                     const char *container)
@@ -1045,6 +1089,7 @@ int main()
     test_diagnostics();
     test_semantic_tokens();
     test_definition();
+    test_declaration();
     test_references();
     test_rename();
     test_outline();
@@ -1056,6 +1101,7 @@ int main()
     test_empty_source();
     test_did_change();
     test_code_action();
+    test_unknown_method();
     test_workspace_symbol();
     test_shutdown();
     send_request("{\"jsonrpc\": \"2.0\", \"method\": \"exit\", \"params\": {}}");
