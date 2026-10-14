@@ -149,6 +149,28 @@ static void codegen_literal_expr(ParserContext *ctx, ASTNode *node)
     }
 }
 
+// The variant follows the last "__".
+// Example: Maybe__int32_t__Nothing
+static int is_instance_enum_variant(ParserContext *ctx, const char *name)
+{
+    const char *last = NULL;
+    for (const char *p = strstr(name, "__"); p; p = strstr(p + 2, "__"))
+    {
+        last = p;
+    }
+    if (!last || last == name)
+    {
+        return 0;
+    }
+    size_t len = (size_t)(last - name);
+    char *enum_name = xmalloc(len + 1);
+    strncpy(enum_name, name, len);
+    enum_name[len] = 0;
+    int found = find_enum_variant_of(ctx, enum_name, last + 2) != NULL;
+    zfree(enum_name);
+    return found;
+}
+
 // Emit variable reference expression
 static void codegen_var_expr(ParserContext *ctx, ASTNode *node)
 {
@@ -228,24 +250,10 @@ static void codegen_var_expr(ParserContext *ctx, ASTNode *node)
         // NODE_EXPR_CALL will add the ().
         if (!g_emitting_callee)
         {
-            EnumVariantReg *ev = find_enum_variant(ctx, method_name);
-            if (ev)
+            if (find_enum_variant_of(ctx, mangled_type, method_name) ||
+                is_instance_enum_variant(ctx, node->var_ref.name))
             {
-                const char *clean_ev = ev->enum_name;
-                if (strncmp(clean_ev, "struct ", 7) == 0)
-                {
-                    clean_ev += 7;
-                }
-                const char *clean_mangled = mangled_type;
-                if (strncmp(clean_mangled, "struct ", 7) == 0)
-                {
-                    clean_mangled += 7;
-                }
-
-                if (strcmp(clean_ev, clean_mangled) == 0)
-                {
-                    EMIT(ctx, "()");
-                }
+                EMIT(ctx, "()");
             }
         }
 
