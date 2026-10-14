@@ -318,7 +318,7 @@ static const char *C_RESERVED_WORDS[] = {
     "goto",          "typedef",  "static",   "extern",     "volatile",  "inline",
     "restrict",      "sizeof",   "const",    "_Alignas",   "_Alignof",  "_Atomic",
     "_Bool",         "_Complex", "_Generic", "_Imaginary", "_Noreturn", "_Static_assert",
-    "_Thread_local", NULL};
+    "_Thread_local", "int",      "char",     "void",       NULL};
 
 int is_c_reserved_word(const char *name)
 {
@@ -330,13 +330,6 @@ int is_c_reserved_word(const char *name)
         }
     }
     return 0;
-}
-
-void warn_c_reserved_word(Token t, const char *name)
-{
-    zwarn_at(t, "Identifier '%s' conflicts with C reserved word", name);
-    fprintf(stderr, COLOR_CYAN "   = note: " COLOR_RESET
-                               "This will cause compilation errors in the generated C code\n");
 }
 
 char *consume_until_semicolon(Lexer *l)
@@ -432,7 +425,7 @@ int is_reserved_keyword(Token t)
     return 0;
 }
 
-void check_identifier(Token t)
+void check_reserved_keyword(Token t)
 {
     if (is_reserved_keyword(t))
     {
@@ -444,4 +437,27 @@ void check_identifier(Token t)
         snprintf(buf, sizeof(buf), "Cannot use reserved keyword '%s' as an identifier", name);
         zpanic_at(t, "%s", buf);
     }
+}
+
+// Names are emitted unchanged into the generated C (variables, parameters,
+// fields, free functions...), so a C keyword used as a name (`let double = 2;`)
+// can only end in C syntax errors.
+void check_c_identifier(Token t)
+{
+    char name[64];
+    snprintf(name, sizeof(name), "%.*s", (int)t.len, t.start);
+    if (is_c_reserved_word(name))
+    {
+        char buf[MAX_SHORT_MSG_LEN];
+        snprintf(buf, sizeof(buf), "'%s' is a C keyword and cannot be used as an identifier", name);
+        const char *hints[] = {"Zen C names are emitted unchanged into the generated C",
+                               "Rename it, for example with a suffix: `value_double`", NULL};
+        zpanic_with_hints(t, buf, hints);
+    }
+}
+
+void check_identifier(Token t)
+{
+    check_reserved_keyword(t);
+    check_c_identifier(t);
 }
