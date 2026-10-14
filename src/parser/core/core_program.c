@@ -364,6 +364,15 @@ ASTNode *parse_program_nodes(ParserContext *ctx, Lexer *l)
                 s->raw_stmt.content = normalize_raw_content(content);
                 zfree(content);
             }
+            else if (t.len == 5 && strncmp(t.start, "const", 5) == 0)
+            {
+                const char *hints[] = {"For a compile-time constant use `def NAME = value;`",
+                                       "For a read-only global use `let NAME: const Type = value;`",
+                                       NULL};
+                zpanic_with_hints(t, "'const' cannot start a top-level declaration", hints);
+                lexer_next(l); // fault-tolerant (LSP): resync on the next declaration
+                continue;
+            }
             else
             {
                 lexer_next(l);
