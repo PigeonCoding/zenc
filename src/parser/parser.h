@@ -341,6 +341,8 @@ typedef struct ModuleState
         currently_parsing; ///< Set: files whose import is in progress (for cycle detection).
     zmap_PluginMap imported_plugins; ///< Map: alias → ImportedPlugin*.
     zmap_FileSet wildcard_imports;   ///< Set: module base names imported via `as *`.
+    zmap_FileSet module_prefixes;    ///< Map: module file path → its symbol prefix.
+    zmap_FileSet prefix_owners;      ///< Map: symbol prefix → the file path that owns it.
 } ModuleState;
 
 /* * Initialize all maps in a ModuleState. Call once after zeroing the struct. */
@@ -352,6 +354,8 @@ static inline void module_state_init(ModuleState *ms)
     ms->imported_plugins = zmap_init(PluginMap, zmap_hash_cstr, zmap_cmp_cstr);
     ms->currently_parsing = zmap_init(FileSet, zmap_hash_cstr, zmap_cmp_cstr);
     ms->wildcard_imports = zmap_init(FileSet, zmap_hash_cstr, zmap_cmp_cstr);
+    ms->module_prefixes = zmap_init(FileSet, zmap_hash_cstr, zmap_cmp_cstr);
+    ms->prefix_owners = zmap_init(FileSet, zmap_hash_cstr, zmap_cmp_cstr);
 }
 
 /**
@@ -622,11 +626,6 @@ char *consume_until_semicolon(Lexer *l);
  */
 int is_c_reserved_word(const char *name);
 
-/**
- * @brief Warns about a C reserved word.
- */
-void warn_c_reserved_word(Token t, const char *name);
-
 // ZenSymbol table
 
 /**
@@ -798,6 +797,8 @@ int is_reserved_keyword(Token t);
  * @brief Checks if an identifier is valid (not a keyword).
  */
 void check_identifier(Token t);
+void check_reserved_keyword(Token t);
+void check_c_identifier(Token t);
 
 /**
  * @brief Main loop to parse top-level nodes in a file.
@@ -843,8 +844,11 @@ Type *parse_type_formal(ParserContext *ctx, Lexer *l);
 Type *type_from_string_helper(const char *c);
 FuncSig *find_func(ParserContext *ctx, const char *name);
 EnumVariantReg *find_enum_variant(ParserContext *ctx, const char *name);
+EnumVariantReg *find_enum_variant_of(ParserContext *ctx, const char *enum_name,
+                                     const char *variant_name);
 TypeAlias *find_type_alias_node(ParserContext *ctx, const char *name);
 char *extract_module_name(const char *path);
+char *module_prefix_for(ParserContext *ctx, const char *path);
 ASTNode *transform_to_trait_object(ParserContext *ctx, const char *target_trait, ASTNode *expr);
 int check_impl(ParserContext *ctx, const char *trait_name, const char *type_name);
 int check_opaque_alias_compat(ParserContext *ctx, Type *a, Type *b);
